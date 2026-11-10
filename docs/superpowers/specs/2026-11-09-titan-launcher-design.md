@@ -21,7 +21,7 @@ O personagem é uma criação original: ogro de fantasia, pele verde-acinzentada
 
 ## O que fica para depois
 
-Papel de parede, personalização de cores, organização de ícones por arrastar, pastas, widgets, ajuste de intensidade das animações, expressões faciais e efeitos de luz e sombra extras.
+Ogro levantando a gaveta de apps ao deslizar para cima, ogro reagindo ao toque em um ícone antes de o app abrir (cada um com sua própria sequência de imagens), papel de parede, personalização de cores, organização de ícones por arrastar, pastas, widgets, ajuste de intensidade das animações, expressões faciais e efeitos de luz e sombra extras.
 
 ## Mecânica do personagem
 
