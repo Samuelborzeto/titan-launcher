@@ -1,8 +1,10 @@
 package com.titanlauncher
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -34,7 +36,11 @@ class MainActivity : ComponentActivity() {
     private var screen by mutableStateOf(Screen.Home)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        // O launcher é sempre escuro: ícones claros nas barras do sistema.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         super.onCreate(savedInstanceState)
         repo = AppRepository(this, lifecycleScope)
         settings = SettingsStore(this)

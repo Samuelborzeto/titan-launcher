@@ -2,10 +2,13 @@ package com.titanlauncher.settings
 
 import android.app.Activity
 import android.app.role.RoleManager
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
@@ -40,6 +43,11 @@ fun SettingsScreen(store: SettingsStore, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    // Se o pedido for recusado ou o sistema não mostrar a pergunta, abre a tela de apps padrão.
+    val roleRequest = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) openHomeSettings(context)
+    }
+
     BackHandler(onBack = onBack)
 
     Column(
@@ -69,7 +77,11 @@ fun SettingsScreen(store: SettingsStore, onBack: () -> Unit) {
         }
         Spacer(Modifier.height(24.dp))
         Button(
-            onClick = { (context as? Activity)?.let(::requestDefaultLauncher) },
+            onClick = {
+                val request = homeRoleIntent(context)
+                val asked = request != null && runCatching { roleRequest.launch(request) }.isSuccess
+                if (!asked) openHomeSettings(context)
+            },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Definir como launcher padrão")
@@ -81,18 +93,16 @@ fun SettingsScreen(store: SettingsStore, onBack: () -> Unit) {
     }
 }
 
-private const val REQUEST_HOME_ROLE = 1001
+/** Pedido do papel de launcher pelo sistema (Android 10+), ou null se não der para pedir. */
+private fun homeRoleIntent(context: Context): Intent? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+    val roles = context.getSystemService(RoleManager::class.java) ?: return null
+    if (!roles.isRoleAvailable(RoleManager.ROLE_HOME) || roles.isRoleHeld(RoleManager.ROLE_HOME)) return null
+    return runCatching { roles.createRequestRoleIntent(RoleManager.ROLE_HOME) }.getOrNull()
+}
 
-private fun requestDefaultLauncher(activity: Activity) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        val roles = activity.getSystemService(RoleManager::class.java)
-        if (roles != null && roles.isRoleAvailable(RoleManager.ROLE_HOME) && !roles.isRoleHeld(RoleManager.ROLE_HOME)) {
-            val asked = runCatching {
-                @Suppress("DEPRECATION")
-                activity.startActivityForResult(roles.createRequestRoleIntent(RoleManager.ROLE_HOME), REQUEST_HOME_ROLE)
-            }.isSuccess
-            if (asked) return
-        }
+private fun openHomeSettings(context: Context) {
+    runCatching {
+        context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
-    runCatching { activity.startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) }
 }

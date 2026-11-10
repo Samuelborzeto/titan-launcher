@@ -103,10 +103,16 @@ class AppRepository(context: Context, private val scope: CoroutineScope) {
             Intent(MediaStore.ACTION_IMAGE_CAPTURE),
         )
         return intents.mapNotNull { intent ->
-            val pkg = runCatching {
+            val preferred = runCatching {
                 pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
             }.getOrNull()
-            current.firstOrNull { it.packageName == pkg }
+            // Sem app padrão definido o sistema devolve a tela de escolha; nesse caso usa o primeiro candidato.
+            current.firstOrNull { it.packageName == preferred }
+                ?: runCatching { pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY) }
+                    .getOrDefault(emptyList())
+                    .firstNotNullOfOrNull { candidate ->
+                        current.firstOrNull { it.packageName == candidate.activityInfo.packageName }
+                    }
         }.distinct()
     }
 

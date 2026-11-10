@@ -9,8 +9,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -47,28 +49,59 @@ class AssetFrameSource(
     // Lido em frame() para a tela redesenhar quando um quadro termina de carregar.
     private var loadedTick by mutableIntStateOf(0)
 
+    // Um quadro por vez, para um deslize rápido não disparar dezenas de decodificações.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val decoder = Dispatchers.IO.limitedParallelism(1)
+
+    @Volatile
+    private var wanted = 0
+
     override val frameCount: Int get() = names.size
 
+    /** O quadro pedido ou, enquanto ele não carrega (ou se o arquivo é inválido), o carregado mais próximo. */
     override fun frame(index: Int): ImageBitmap? {
         loadedTick
-        return cache.get(index)
+        cache.get(index)?.let { return it }
+        val loaded = cache.snapshot()
+        val nearest = loaded.keys.minByOrNull { abs(it - index) } ?: return null
+        return loaded[nearest]
     }
 
     override fun prefetch(center: Int) {
+        wanted = center
         for (i in (center - NEIGHBORS)..(center + NEIGHBORS)) {
             if (i !in names.indices) continue
             if (cache.get(i) != null || i in failed || !loading.add(i)) continue
-            scope.launch(Dispatchers.IO) {
-                val bitmap = runCatching {
+            scope.launch(decoder) {
+                // O dedo já foi para longe deste quadro: não vale decodificar.
+                if (abs(i - wanted) > NEIGHBORS) {
+                    loading.remove(i)
+                    return@launch
+                }
+                var outOfMemory = false
+                val bitmap = try {
                     assets.open("$FOLDER/${names[i]}").use { BitmapFactory.decodeStream(it) }
-                }.getOrNull()
+                } catch (e: OutOfMemoryError) {
+                    outOfMemory = true
+                    null
+                } catch (e: Exception) {
+                    null
+                }
                 withContext(Dispatchers.Main) {
-                    if (bitmap != null) cache.put(i, bitmap.asImageBitmap()) else failed.add(i)
+                    when {
+                        bitmap != null -> cache.put(i, bitmap.asImageBitmap())
+                        // Falta de memória é passageira; só arquivo inválido fica marcado.
+                        !outOfMemory -> failed.add(i)
+                    }
                     loading.remove(i)
                     loadedTick++
                 }
             }
         }
+    }
+
+    init {
+        if (names.isNotEmpty()) prefetch(0)
     }
 
     private companion object {

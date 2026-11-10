@@ -23,7 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.titanlauncher.apps.AppEntry
 import com.titanlauncher.apps.AppRepository
@@ -43,6 +44,7 @@ import com.titanlauncher.titan.PushState
 import com.titanlauncher.titan.TitanLayer
 import com.titanlauncher.titan.computePushState
 import com.titanlauncher.ui.TitanColors
+import kotlin.math.abs
 
 private const val PAGES = 3
 private const val COLUMNS = 4
@@ -119,26 +121,33 @@ fun HomeScreen(
     }
 }
 
-/** Converte o estado do pager no estado do ogro, medindo a velocidade a cada quadro da tela. */
+private const val STILL_AFTER_NANOS = 150_000_000L
+
+/**
+ * Converte o estado do pager no estado do ogro. O dedo conta como parado quando
+ * a tela andou menos de 4 dp nos últimos 150 ms.
+ */
 @Composable
 private fun rememberPushState(pagerState: PagerState, widthPx: Float): PushState {
     val dragging by pagerState.interactionSource.collectIsDraggedAsState()
-    var velocity by remember { mutableFloatStateOf(0f) }
+    var still by remember { mutableStateOf(false) }
+    val stillDistancePx = with(LocalDensity.current) { 4.dp.toPx() }
 
     LaunchedEffect(pagerState.isScrollInProgress, widthPx) {
-        if (!pagerState.isScrollInProgress) {
-            velocity = 0f
-            return@LaunchedEffect
-        }
-        var lastOffset = pagerState.currentPage + pagerState.currentPageOffsetFraction
-        var lastNanos = withFrameNanos { it }
+        still = false
+        if (!pagerState.isScrollInProgress) return@LaunchedEffect
+        var anchorPx = (pagerState.currentPage + pagerState.currentPageOffsetFraction) * widthPx
+        var anchorNanos = withFrameNanos { it }
         while (true) {
             val now = withFrameNanos { it }
-            val offset = pagerState.currentPage + pagerState.currentPageOffsetFraction
-            val seconds = (now - lastNanos) / 1_000_000_000f
-            if (seconds > 0f) velocity = (offset - lastOffset) * widthPx / seconds
-            lastOffset = offset
-            lastNanos = now
+            val px = (pagerState.currentPage + pagerState.currentPageOffsetFraction) * widthPx
+            if (abs(px - anchorPx) > stillDistancePx) {
+                anchorPx = px
+                anchorNanos = now
+                still = false
+            } else if (now - anchorNanos > STILL_AFTER_NANOS) {
+                still = true
+            }
         }
     }
 
@@ -147,7 +156,7 @@ private fun rememberPushState(pagerState: PagerState, widthPx: Float): PushState
         settledPage = pagerState.settledPage,
         pageCount = pagerState.pageCount,
         dragging = dragging,
-        velocityPxPerSec = velocity,
+        still = still,
     )
 }
 
