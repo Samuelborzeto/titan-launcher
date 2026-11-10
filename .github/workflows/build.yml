@@ -3,7 +3,6 @@ name: Build
 on:
   push:
     branches: ["**"]
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -29,8 +28,13 @@ jobs:
         with:
           name: TitanLauncher
           path: TitanLauncher.apk
+      # Todo push na main publica uma Release nova com o APK.
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: Titan Launcher v0.1.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           files: TitanLauncher.apk
